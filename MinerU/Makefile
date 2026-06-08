@@ -7,15 +7,13 @@ DC     := docker compose
 
 .DEFAULT_GOAL := help
 
+##@ General
 .PHONY: help
 help: ## Show this help
-	@echo "MinerU — available make targets:"
+	@awk 'BEGIN {FS = ":.*##"; print "MinerU — available make targets:"} /^##@/ {print ""; printf "\033[1m%s\033[0m\n", substr($$0, 5); next} /^[a-zA-Z0-9_-]+:.*##/ {printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}' $(MAKEFILE_LIST)
 	@echo
-	@grep -hE '^[a-zA-Z0-9_-]+:.*?## ' $(MAKEFILE_LIST) \
-		| sort \
-		| awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n", $$1, $$2}'
 
-# ---- Client (thin http-client, runs here) -----------------------------------
+##@ Client (thin http-client, runs here)
 
 .PHONY: build
 build: ## Build the MinerU client image
@@ -71,7 +69,7 @@ purge: ## DESTRUCTIVE: clean + delete the server model cache
 	@echo "Deleting $(SERVER)/models (re-downloads on next server start)..."
 	rm -rf $(SERVER)/models
 
-# ---- Server (VLM, deploy on the GPU host) -----------------------------------
+##@ Server (VLM, deploy on the GPU host)
 
 .PHONY: server-build
 server-build: ## Build the MinerU VLM server image (GPU host)
