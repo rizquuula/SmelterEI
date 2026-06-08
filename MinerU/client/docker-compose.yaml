@@ -1,0 +1,32 @@
+# MinerU client — thin http-client, no local model.
+# All knobs live in .env (copy from .env.example).
+#
+#   docker compose up -d --build      # start (builds the thin image)
+#   docker compose logs -f            # watch
+#   docker compose down               # stop
+#
+# Point MINERU_VLM_SERVER_URL at a running mineru-vlm-server (../server/).
+services:
+  mineru-client:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: smelterei/mineru-client:latest
+    container_name: mineru-client
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${MINERU_API_PORT:-8000}:8000"
+    environment:
+      MINERU_API_MAX_CONCURRENT_REQUESTS: ${MINERU_API_MAX_CONCURRENT_REQUESTS:-3}
+    # Optional: mount an output dir for CLI use inside the container.
+    # volumes:
+    #   - ${MINERU_OUTPUT_DIR:-./output}:/output
+    healthcheck:
+      # FastAPI always serves /docs; treat that as "up".
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/docs >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # No model download on start — service is ready quickly.
+      start_period: 30s

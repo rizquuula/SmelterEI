@@ -4,90 +4,87 @@
 into clean Markdown + structured JSON. In SmelterEI it's the **front door**: feed a
 PDF → get extracted document → hand it to the agentic dataset generator.
 
-This folder runs MinerU as an HTTP API via Docker Compose. **CPU by default** (runs on
-this machine, no GPU), and **configurable for a remote model** when you want GPU speed.
+This folder is split into two independently deployable services:
 
 ```
-PDF ──▶ mineru-api (this folder) ──▶ Markdown + JSON ──▶ dataset generator
-                  │
-                  └── backend=pipeline         → runs locally on CPU
-                  └── backend=vlm-http-client  → offloads to a remote GPU server
+┌─────────────────────────────────────────────┐
+│  Dev / CPU box                              │
+│                                             │
+│  mineru-client (:8000)                      │
+│  client/docker-compose.yaml                 │
+│  no model, no PyTorch                       │
+└─────────────────┬───────────────────────────┘
+                  │  HTTP :30000
+                  │  MINERU_VLM_SERVER_URL
+                  ▼
+┌─────────────────────────────────────────────┐
+│  GPU host                                   │
+│                                             │
+│  mineru-vlm-server (:30000)                 │
+│  server/docker-compose.yaml                 │
+│  CUDA + vllm + model weights                │
+└─────────────────────────────────────────────┘
 ```
 
-## Quick start (CPU)
+| Side | Path | Image size | GPU needed |
+|---|---|---|---|
+| Client (API gateway) | `client/` | ~200 MB | No |
+| VLM server (inference) | `server/` | multi-GB | Yes (NVIDIA) |
+
+## Client quick start
+
+The client is the primary day-to-day workflow:
 
 ```bash
-cd MinerU
-cp .env.example .env          # already present; edit if you like
-docker compose up -d --build  # first build ~ a few min; first parse downloads models
-docker compose logs -f        # wait for "Start MinerU FastAPI Service"
+cd MinerU/client
+cp .env.example .env          # set MINERU_VLM_SERVER_URL to your GPU host
+docker compose up -d --build
+docker compose logs -f        # watch for "Start MinerU FastAPI Service"
 ```
 
 API is then on <http://localhost:8000> (Swagger UI at `/docs`).
 
-Test it:
+Smoke test:
 
 ```bash
-./smoke-test.sh some.pdf
+cd MinerU/client
+./smoke-test.sh path/to/file.pdf
 # or raw curl:
 curl -X POST http://localhost:8000/file_parse \
   -F "files=@some.pdf" \
-  -F "backend=pipeline" \
-  -F "return_md=true" \
-  -F "return_content_list=true"
+  -F "backend=vlm-http-client" \
+  -F "server_url=http://gpu-host:30000" \
+  -F "return_md=true"
 ```
 
-> First parse pulls a few GB of pipeline models into `./models` (mounted cache).
-> Subsequent runs are fast. CPU parsing is slower per page than GPU — fine for dev.
+See [`client/README.md`](client/README.md) for configuration details.
 
-## Configuration (`.env`)
+## GPU server
 
-| Variable | Default | Meaning |
-|---|---|---|
-| `MINERU_API_PORT` | `8000` | Host port for the API |
-| `MINERU_API_MAX_CONCURRENT_REQUESTS` | `3` | Parallel parse requests |
-| `MINERU_DEVICE_MODE` | `cpu` | `cpu` or `cuda` |
-| `MINERU_MODEL_SOURCE` | `huggingface` | `huggingface` \| `modelscope` \| `local` |
-| `MINERU_MODELS_DIR` | `./models` | Host model cache (persisted) |
-| `MINERU_OUTPUT_DIR` | `./output` | Host output dir (CLI use) |
-| `MINERU_FORMULA_ENABLE` | `true` | Parse formulas |
-| `MINERU_TABLE_ENABLE` | `true` | Parse tables |
-| `MINERU_BACKEND` | `pipeline` | Backend the generator requests (see below) |
-| `MINERU_VLM_SERVER_URL` | _(empty)_ | Remote VLM server URL for `vlm-http-client` |
-
-## Remote model (GPU without a local GPU)
-
-The backend is chosen **per request**, so this local CPU service stays a thin
-orchestrator and the heavy model runs elsewhere:
-
-1. On a GPU box, run MinerU's official VLM server (port `30000`) — see MinerU's
-   [docker dir](https://github.com/opendatalab/MinerU/tree/master/docker).
-2. Here, set in `.env`:
-   ```dotenv
-   MINERU_BACKEND=vlm-http-client
-   MINERU_VLM_SERVER_URL=http://gpu-host:30000
-   ```
-3. Calls then offload inference to that server:
-   ```bash
-   curl -X POST http://localhost:8000/file_parse \
-     -F "files=@some.pdf" \
-     -F "backend=vlm-http-client" \
-     -F "server_url=http://gpu-host:30000" \
-     -F "return_md=true"
-   ```
-   (`./smoke-test.sh` adds `server_url` automatically when the backend is an http-client.)
-
-## Local GPU (later)
-
-On an NVIDIA host with `nvidia-container-toolkit`:
+Deploy on your NVIDIA box:
 
 ```bash
-docker compose -f docker-compose.yaml -f docker-compose.gpu.yaml up -d
+cd MinerU/server
+cp .env.example .env
+docker compose up -d --build  # first run downloads model weights
 ```
 
-Note: the default image ships **CPU-only PyTorch**. For true local GPU inference,
-point `image:` in `docker-compose.gpu.yaml` at MinerU's official CUDA image. For most
-cases the **remote-model** path above is simpler.
+See [`server/README.md`](server/README.md) for requirements and details.
+
+## Per-request backend contract
+
+The backend is chosen **per request** via the `backend` form field. Supported values
+in MinerU 3.2.x:
+
+| Backend | Where inference runs |
+|---|---|
+| `vlm-http-client` | Remote VLM server (default for this client) |
+| `hybrid-http-client` | Remote VLM server (hybrid mode) |
+| `vlm-auto-engine` | Local GPU (not this image) |
+| `pipeline` | Local CPU/GPU (not this image) |
+
+When using an `*http-client` backend, pass `server_url` in the form body (or set
+`MINERU_VLM_SERVER_URL` in `.env`; `smoke-test.sh` forwards it automatically).
 
 ## Key endpoints
 
@@ -96,9 +93,3 @@ cases the **remote-model** path above is simpler.
   `end_page_id`, `return_md`, `return_content_list`, `return_middle_json`,
   `response_format_zip`, …
 - `GET /docs` — Swagger UI / full schema.
-
-## How the generator consumes this
-
-Point the dataset generator at `http://localhost:${MINERU_API_PORT}/file_parse`,
-read `MINERU_BACKEND` / `MINERU_VLM_SERVER_URL` from this same `.env`, and use the
-returned Markdown + `content_list` JSON as the extracted-document input.

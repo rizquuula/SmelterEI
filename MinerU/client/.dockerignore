@@ -1,0 +1,9 @@
+# Keep the build context tiny — the image installs everything via pip,
+# nothing local is COPYed in.
+.env
+.env.*
+output/
+*.md
+*.sh
+__pycache__/
+.git/

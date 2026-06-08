@@ -1,0 +1,40 @@
+# MinerU VLM server — deploy on the GPU host (needs nvidia-container-toolkit).
+# All knobs live in .env (copy from .env.example).
+#
+#   docker compose up -d --build      # start (first run downloads model weights)
+#   docker compose logs -f            # watch; first boot can take minutes for model pull
+#   docker compose down               # stop
+#
+# Client (../client/) connects via MINERU_VLM_SERVER_URL=http://<this-host>:30000.
+services:
+  mineru-vlm-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: smelterei/mineru-vlm-server:latest
+    container_name: mineru-vlm-server
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "${MINERU_VLM_PORT:-30000}:30000"
+    environment:
+      MINERU_MODEL_SOURCE: ${MINERU_MODEL_SOURCE:-huggingface}
+    volumes:
+      # Model cache — first run downloads weights here; persists across restarts.
+      - ${MINERU_MODELS_DIR:-./models}:/root/.cache
+    shm_size: "8gb"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      # Server exposes OpenAI-compatible /v1/models once the model is loaded.
+      test: ["CMD-SHELL", "curl -fsS http://localhost:30000/v1/models >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      # First boot downloads model weights — give it room before marking unhealthy.
+      start_period: 600s

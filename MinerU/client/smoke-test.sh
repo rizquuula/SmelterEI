@@ -12,7 +12,7 @@ if [[ -f .env ]]; then set -a; . ./.env; set +a; fi
 
 PDF="${1:?usage: ./smoke-test.sh path/to/file.pdf}"
 PORT="${MINERU_API_PORT:-8000}"
-BACKEND="${MINERU_BACKEND:-pipeline}"
+BACKEND="${MINERU_BACKEND:-vlm-http-client}"
 URL="http://localhost:${PORT}/file_parse"
 
 args=(-F "files=@${PDF}" -F "backend=${BACKEND}" -F "return_md=true" -F "return_content_list=true")

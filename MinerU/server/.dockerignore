@@ -3,8 +3,6 @@
 .env
 .env.*
 models/
-output/
 *.md
-*.sh
 __pycache__/
 .git/

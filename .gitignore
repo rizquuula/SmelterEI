@@ -1,12 +1,12 @@
 # --- Local env (copy from .env.example) ---
 .env
-*/.env
+**/.env
 !.env.example
-!*/.env.example
+!**/.env.example
 
 # --- MinerU runtime artifacts ---
-MinerU/models/
-MinerU/output/
+MinerU/server/models/
+MinerU/client/output/
 
 # --- Python ---
 __pycache__/
