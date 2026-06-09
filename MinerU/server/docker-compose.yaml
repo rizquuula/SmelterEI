@@ -18,7 +18,20 @@ services:
     ports:
       - "${MINERU_VLM_PORT:-30000}:30000"
     environment:
-      MINERU_MODEL_SOURCE: ${MINERU_MODEL_SOURCE:-huggingface}
+      # Pull the pinned model from ModelScope instead of Hugging Face (use the
+      # matching OpenDataLab/... id in MINERU_VLM_MODEL). Off by default.
+      VLLM_USE_MODELSCOPE: ${VLLM_USE_MODELSCOPE:-false}
+    # Explicit model pin — overrides the Dockerfile CMD so the VLM id is tunable
+    # from .env without a rebuild. `--engine vllm` forces the vLLM backend.
+    command:
+      - --engine
+      - vllm
+      - --model
+      - ${MINERU_VLM_MODEL:-opendatalab/MinerU2.5-Pro-2605-1.2B}
+      - --host
+      - 0.0.0.0
+      - --port
+      - "30000"
     volumes:
       # Model cache — first run downloads weights here; persists across restarts.
       - ${MINERU_MODELS_DIR:-./models}:/root/.cache

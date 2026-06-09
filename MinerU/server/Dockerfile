@@ -7,8 +7,10 @@
 #   https://github.com/opendatalab/MinerU/tree/master/docker
 FROM nvidia/cuda:12.4.1-runtime-ubuntu22.04
 
-# Pin/relax the MinerU version from the build command if needed.
-ARG MINERU_VERSION=">=3.2.1"
+# Pin MinerU exactly for reproducible builds — this locks the bundled vLLM and
+# the MinerU logits processor (mineru_vl_utils) that the VLM needs. Bump
+# deliberately. Override at build time with --build-arg MINERU_VERSION="==X.Y.Z".
+ARG MINERU_VERSION="==3.2.3"
 
 ENV PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
@@ -38,4 +40,9 @@ EXPOSE 30000
 
 # OpenAI-compatible VLM server; client reaches it at http://<host>:30000.
 ENTRYPOINT ["mineru-openai-server"]
-CMD ["--engine", "vllm", "--host", "0.0.0.0", "--port", "30000"]
+# vLLM engine + an explicit model pin, so we don't ride MinerU's shifting default
+# VLM. MinerU consumes `--model` and hands the id to `vllm serve`; vLLM resolves
+# it from Hugging Face by default. docker compose overrides this command to inject
+# ${MINERU_VLM_MODEL} from .env — this literal is the standalone `docker run`
+# default. (MinerU appends its logits processor automatically.)
+CMD ["--engine", "vllm", "--model", "opendatalab/MinerU2.5-Pro-2605-1.2B", "--host", "0.0.0.0", "--port", "30000"]
