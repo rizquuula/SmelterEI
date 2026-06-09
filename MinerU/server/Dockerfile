@@ -18,13 +18,14 @@ ENV PYTHONUNBUFFERED=1 \
     HF_HOME=/root/.cache/huggingface \
     MODELSCOPE_CACHE=/root/.cache/modelscope
 
-# Python 3.12 + pip.
+# Python 3.12 + pip. No python3.12-distutils: distutils was removed from Python
+# 3.12 (PEP 632) and deadsnakes ships no such package. get-pip.py bootstraps pip
+# without it; setuptools provides the distutils shim during PEP 517 builds.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         software-properties-common && \
     add-apt-repository ppa:deadsnakes/ppa && \
     apt-get update && apt-get install -y --no-install-recommends \
         python3.12 \
-        python3.12-distutils \
         curl && \
     curl -sS https://bootstrap.pypa.io/get-pip.py | python3.12 && \
     update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 && \
