@@ -18,6 +18,11 @@ ENV PYTHONUNBUFFERED=1 \
     HF_HOME=/root/.cache/huggingface \
     MODELSCOPE_CACHE=/root/.cache/modelscope
 
+# Non-interactive apt — tzdata (pulled in transitively) otherwise prompts for a
+# timezone and hangs the build with no TTY to answer. ARG keeps it build-only so
+# it doesn't leak into the running container's environment.
+ARG DEBIAN_FRONTEND=noninteractive
+
 # Python 3.12 + pip. No python3.12-distutils: distutils was removed from Python
 # 3.12 (PEP 632) and deadsnakes ships no such package. get-pip.py bootstraps pip
 # without it; setuptools provides the distutils shim during PEP 517 builds.
